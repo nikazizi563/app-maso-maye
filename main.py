@@ -1,33 +1,109 @@
 import tkinter as tk
-from tkinter import ttk
-from datetime import datetime, timedelta
 import requests
 import json
 import os
+import logging
+import pickle
+import threading
+import random
+import pystray
+import winsound
+from tkinter import ttk, messagebox, StringVar, Tk, OptionMenu
+from datetime import datetime, timedelta
+from PIL import Image, ImageDraw
+from plyer import notification
+from pystray import MenuItem as item
 
-# URL to fetch data from the API
-url = "https://api.waktusolat.app/v2/solat/KTN01"
 
-def fetch_and_save_data():
+# Locations data
+locations = [
+    {"jakimCode": "JHR01", "negeri": "Johor", "daerah": "Pulau Aur dan Pulau Pemanggil"},
+    {"jakimCode": "JHR02", "negeri": "Johor", "daerah": "Johor Bahru, Kota Tinggi, Mersing, Kulai"},
+    {"jakimCode": "JHR03", "negeri": "Johor", "daerah": "Kluang, Pontian"},
+    {"jakimCode": "JHR04", "negeri": "Johor", "daerah": "Batu Pahat, Muar, Segamat, Gemas Johor, Tangkak"},
+    {"jakimCode": "KDH01", "negeri": "Kedah", "daerah": "Kota Setar, Kubang Pasu, Pokok Sena (Daerah Kecil)"},
+    {"jakimCode": "KDH02", "negeri": "Kedah", "daerah": "Kuala Muda, Yan, Pendang"},
+    {"jakimCode": "KDH03", "negeri": "Kedah", "daerah": "Padang Terap, Sik"},
+    {"jakimCode": "KDH04", "negeri": "Kedah", "daerah": "Baling"},
+    {"jakimCode": "KDH05", "negeri": "Kedah", "daerah": "Bandar Baharu, Kulim"},
+    {"jakimCode": "KDH06", "negeri": "Kedah", "daerah": "Langkawi"},
+    {"jakimCode": "KDH07", "negeri": "Kedah", "daerah": "Puncak Gunung Jerai"},
+    {"jakimCode": "KTN01", "negeri": "Kelantan", "daerah": "Bachok, Kota Bharu, Machang, Pasir Mas, Pasir Puteh, Tanah Merah, Tumpat, Kuala Krai, Mukim Chiku"},
+    {"jakimCode": "KTN02", "negeri": "Kelantan", "daerah": "Gua Musang (Daerah Galas Dan Bertam), Jeli, Jajahan Kecil Lojing"},
+    {"jakimCode": "MLK01", "negeri": "Melaka", "daerah": "SELURUH NEGERI MELAKA"},
+    {"jakimCode": "NGS01", "negeri": "Negeri Sembilan", "daerah": "Tampin, Jempol"},
+    {"jakimCode": "NGS02", "negeri": "Negeri Sembilan", "daerah": "Jelebu, Kuala Pilah, Rembau"},
+    {"jakimCode": "NGS03", "negeri": "Negeri Sembilan", "daerah": "Port Dickson, Seremban"},
+    {"jakimCode": "PHG01", "negeri": "Pahang", "daerah": "Pulau Tioman"},
+    {"jakimCode": "PHG02", "negeri": "Pahang", "daerah": "Kuantan, Pekan, Rompin, Muadzam Shah"},
+    {"jakimCode": "PHG03", "negeri": "Pahang", "daerah": "Jerantut, Temerloh, Maran, Bera, Chenor, Jengka"},
+    {"jakimCode": "PHG04", "negeri": "Pahang", "daerah": "Bentong, Lipis, Raub"},
+    {"jakimCode": "PHG05", "negeri": "Pahang", "daerah": "Genting Sempah, Janda Baik, Bukit Tinggi"},
+    {"jakimCode": "PHG06", "negeri": "Pahang", "daerah": "Cameron Highlands, Genting Highlands, Bukit Fraser"},
+    {"jakimCode": "PRK01", "negeri": "Perak", "daerah": "Tapah, Slim River, Tanjung Malim"},
+    {"jakimCode": "PRK02", "negeri": "Perak", "daerah": "Kuala Kangsar, Sg. Siput , Ipoh, Batu Gajah, Kampar"},
+    {"jakimCode": "PRK03", "negeri": "Perak", "daerah": "Lenggong, Pengkalan Hulu, Grik"},
+    {"jakimCode": "PRK04", "negeri": "Perak", "daerah": "Temengor, Belum"},
+    {"jakimCode": "PRK05", "negeri": "Perak", "daerah": "Kg Gajah, Teluk Intan, Bagan Datuk, Seri Iskandar, Beruas, Parit, Lumut, Sitiawan, Pulau Pangkor"},
+    {"jakimCode": "PRK06", "negeri": "Perak", "daerah": "Selama, Taiping, Bagan Serai, Parit Buntar"},
+    {"jakimCode": "PRK07", "negeri": "Perak", "daerah": "Bukit Larut"},
+    {"jakimCode": "PLS01", "negeri": "Perlis", "daerah": "SELURUH NEGERI PERLIS"},
+    {"jakimCode": "PNG01", "negeri": "Pulau Pinang", "daerah": "SELURUH NEGERI PULAU PINANG"},
+    {"jakimCode": "SBH01", "negeri": "Sabah", "daerah": "Bahagian Sandakan (Timur), Bukit Garam, Semawang, Temanggong, Tambisan, Bandar Sandakan, Sukau"},
+    {"jakimCode": "SBH02", "negeri": "Sabah", "daerah": "Beluran, Telupid, Pinangah, Terusan, Kuamut, Bahagian Sandakan (Barat)"},
+    {"jakimCode": "SBH03", "negeri": "Sabah", "daerah": "Lahad Datu, Silabukan, Kunak, Sahabat, Semporna, Tungku, Bahagian Tawau (Timur)"},
+    {"jakimCode": "SBH04", "negeri": "Sabah", "daerah": "Bandar Tawau, Balong, Merotai, Kalabakan, Bahagian Tawau (Barat)"},
+    {"jakimCode": "SBH05", "negeri": "Sabah", "daerah": "Kudat, Kota Marudu, Pitas, Pulau Banggi, Bahagian Kudat"},
+    {"jakimCode": "SBH06", "negeri": "Sabah", "daerah": "Gunung Kinabalu"},
+    {"jakimCode": "SBH07", "negeri": "Sabah", "daerah": "Kota Kinabalu, Ranau, Kota Belud, Tuaran, Penampang, Papar, Putatan, Bahagian Pantai Barat"},
+    {"jakimCode": "SBH08", "negeri": "Sabah", "daerah": "Pensiangan, Keningau, Tambunan, Nabawan, Bahagian Pendalaman (Atas)"},
+    {"jakimCode": "SBH09", "negeri": "Sabah", "daerah": "Beaufort, Kuala Penyu, Sipitang, Tenom, Long Pasia, Membakut, Weston, Bahagian Pendalaman (Bawah)"},
+    {"jakimCode": "SWK01", "negeri": "Sarawak", "daerah": "Limbang, Lawas, Sundar, Trusan"},
+    {"jakimCode": "SWK02", "negeri": "Sarawak", "daerah": "Miri, Niah, Bekenu, Sibuti, Marudi"},
+    {"jakimCode": "SWK03", "negeri": "Sarawak", "daerah": "Pandan, Belaga, Suai, Tatau, Sebauh, Bintulu"},
+    {"jakimCode": "SWK04", "negeri": "Sarawak", "daerah": "Sibu, Mukah, Dalat, Song, Igan, Oya, Balingian, Kanowit, Kapit"},
+    {"jakimCode": "SWK05", "negeri": "Sarawak", "daerah": "Sarikei, Matu, Julau, Rajang, Daro, Bintangor, Belawai"},
+    {"jakimCode": "SWK06", "negeri": "Sarawak", "daerah": "Lubok Antu, Sri Aman, Roban, Debak, Betong, Saratok"},
+    {"jakimCode": "SWK07", "negeri": "Sarawak", "daerah": "Kuching, Bau, Lundu, Sematan"},
+    {"jakimCode": "SWK08", "negeri": "Sarawak", "daerah": "Serian, Simunjan, Samarahan, Sebuyau, Meludam"},
+    {"jakimCode": "SWK09", "negeri": "Sarawak", "daerah": "Kota Samarahan"},
+    {"jakimCode": "SGR01", "negeri": "Selangor", "daerah": "Gombak, Petaling, Sepang, Hulu Langat, Hulu Selangor, S.Alam"},
+    {"jakimCode": "SGR02", "negeri": "Selangor", "daerah": "Kuala Selangor, Sabak Bernam"},
+    {"jakimCode": "SGR03", "negeri": "Selangor", "daerah": "Klang, Kuala Langat"},
+    {"jakimCode": "TRG01", "negeri": "Terengganu", "daerah": "Kuala Terengganu, Marang, Kuala Nerus"},
+    {"jakimCode": "TRG02", "negeri": "Terengganu", "daerah": "Besut, Setiu"},
+    {"jakimCode": "TRG03", "negeri": "Terengganu", "daerah": "Hulu Terengganu"},
+    {"jakimCode": "TRG04", "negeri": "Terengganu", "daerah": "Dungun, Kemaman"},
+    {"jakimCode": "WLY01", "negeri": "Kuala Lumpur", "daerah": "Kuala Lumpur"},
+    {"jakimCode": "WLY02", "negeri": "Labuan", "daerah": "Labuan"},
+    {"jakimCode": "WLY03", "negeri": "Putrajaya", "daerah": "Putrajaya"}
+]
+
+# Define function to fetch data from API with the given zone
+def fetch_and_save_data(zone):
+    url = f"https://api.waktusolat.app/v2/solat/{zone}"
     response = requests.get(url)
     data = response.json()
     with open('prayer_times.json', 'w') as f:
         json.dump(data, f)
     return data
 
-def load_data():
+def load_data(zone):
     if not os.path.exists('prayer_times.json'):
-        return fetch_and_save_data()
+        return fetch_and_save_data(zone)
 
     with open('prayer_times.json', 'r') as f:
         data = json.load(f)
+
+    if 'last_updated' not in data or 'prayers' not in data:
+        return fetch_and_save_data(zone)
 
     last_updated = datetime.strptime(data['last_updated'], '%Y-%m-%dT%H:%M:%S.%fZ')
     current_date = datetime.now()
 
     # Check if a month has passed since the last update
     if current_date.month != last_updated.month or current_date.year != last_updated.year:
-        data = fetch_and_save_data()
+        data = fetch_and_save_data(zone)
     
     return data
 
@@ -115,30 +191,246 @@ def check_for_next_day_update():
     if now > isha_time:
         update_prayer_times()
 
-# Load data
-data = load_data()
-current_day_prayers = get_current_day_prayers(data['prayers'], datetime.now().day)
+notifications_muted = False
+# Global variable to store the settings window instance
+settings_window = None  
+change_location_window = None
+about_window = None  
 
-# Set up UI
+# Settings function
+def open_settings_window():
+    global settings_window
+    
+    if settings_window is None or not settings_window.winfo_exists():  # Check if settings window is not already open or has been closed
+        settings_window = tk.Toplevel(root)
+        settings_window.title("Settings")
+        settings_window.resizable(0, 0) # Disable resizing
+        settings_window.attributes("-topmost", True)  # Ensure stays on top
+        settings_window.attributes('-toolwindow', 1)  # Windows-specific attribute to remove minimize and maximize buttons
+        
+        # Title for location settings
+        tk.Label(settings_window, text="Location Settings", font=("Helvetica", 12)).grid(row=0, column=0, columnspan=2, padx=10, pady=5)
+
+        # Display current selected location
+        tk.Label(settings_window, text="Selected Location:", font=("Helvetica", 10)).grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        selected_location_display = tk.Label(settings_window, textvariable=selected_zone, font=("Helvetica", 10)) # why does it show PY_VAR0
+        selected_location_display.grid(row=1, column=1, sticky="w", padx=10, pady=5)
+
+        # Change location button
+        change_location_button = tk.Button(settings_window, text="Change Location", command=lambda: open_change_location_window(settings_window))
+        change_location_button.grid(row=2, column=0, columnspan=2, padx=10, pady=5)
+
+        # Notifications settings title
+        tk.Label(settings_window, text="Notifications Settings", font=("Helvetica", 12)).grid(row=3, column=0, columnspan=2, padx=10, pady=5)
+        tk.Label(settings_window, text="Notifications:", font=("Helvetica", 10)).grid(row=4, column=0, sticky="w", padx=10, pady=5)
+        
+        notification_status_label = tk.Label(settings_window, text="Muted" if notifications_muted else "Active", font=("Helvetica", 10))
+        notification_status_label.grid(row=4, column=1, sticky="w", padx=10, pady=5)
+
+        def toggle_notifications():
+            global notifications_muted
+            notifications_muted = not notifications_muted
+            notification_status_label.config(text="Muted" if notifications_muted else "Active")
+
+        notification_toggle_button = tk.Button(settings_window, text="Toggle Notifications", command=toggle_notifications)
+        notification_toggle_button.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
+
+    else:
+        settings_window.lift()  
+def open_change_location_window(settings_window):
+    global change_location_window
+
+    if change_location_window is None or not change_location_window.winfo_exists():  # Check if settings window is not already open or has been closed
+        settings_window.destroy()
+        change_location_window = tk.Toplevel(root)
+        change_location_window.title("Change Location")
+        change_location_window.resizable(0, 0)  # Disable resizing
+        change_location_window.attributes("-topmost", True)  # Ensure stays on top
+        change_location_window.attributes('-toolwindow', 1)  # Windows-specific attribute to remove minimize and maximize buttons
+
+        # Title for location settings
+        tk.Label(change_location_window, text="Update Location", font=("Helvetica", 12)).grid(row=0, column=0, columnspan=2, padx=10, pady=5)
+
+        # Labels for state and district selection (using Arial font)
+        tk.Label(change_location_window, text="Select State:", font=("Arial", 10)).grid(row=1, column=0, padx=10, pady=10)
+        tk.Label(change_location_window, text="Select District:", font=("Arial", 10)).grid(row=2, column=0, padx=10, pady=10)
+
+        # State combobox (using Arial font)
+        state_var = tk.StringVar()
+        state_combobox = ttk.Combobox(change_location_window, textvariable=state_var)
+        state_combobox.grid(row=1, column=1, padx=10, pady=10)
+
+        # District combobox (using Arial font)
+        district_var = tk.StringVar()
+        district_combobox = ttk.Combobox(change_location_window, textvariable=district_var)
+        district_combobox.grid(row=2, column=1, padx=10, pady=10)
+
+        # Populate state values
+        states = sorted(set(loc["negeri"] for loc in locations))
+        state_combobox['values'] = states
+
+        def update_district_combobox(event):
+            district_var.set("")
+            district_combobox.set("")
+            selected_state = state_var.get()
+            districts = [loc['daerah'] for loc in locations if loc['negeri'] == selected_state]
+            district_combobox['values'] = districts
+
+        state_combobox.bind("<<ComboboxSelected>>", update_district_combobox)
+
+        def change_location(*args):
+            selected_state = state_var.get()
+            selected_district = district_var.get()
+            global data, current_day_prayers
+            if selected_state and selected_district:
+                zone = next((loc['jakimCode'] for loc in locations if loc['negeri'] == selected_state and loc['daerah'] == selected_district), None)
+                if zone:
+                    data = fetch_and_save_data(zone)
+                    current_day_prayers = get_current_day_prayers(data['prayers'], datetime.now().day)
+                    update_prayer_times()
+                    change_location_window.destroy()
+                else:
+                    messagebox.showerror("Error", "Invalid state or district selection.")
+            else:
+                messagebox.showerror("Error", "Please select state and district.")
+
+        # Save button
+        save_button = tk.Button(change_location_window, text="Save", command=change_location)
+        save_button.grid(row=3, column=0, columnspan=2, padx=10, pady=5)
+    else:
+        change_location_window.lift()
+
+# UI extra function
+def on_closing():
+    if messagebox.askokcancel("Exit Confirmation", "Do you want to quit?"):
+        root.quit()
+def show_main_window(icon, item):
+    icon.stop()
+    root.after(0, root.deiconify)
+def quit_application(icon, item):
+    icon.stop()
+    if messagebox.askokcancel("Exit Confirmation", "Do you want to quit?"):
+        root.quit()
+
+# Function to update the tray icon menu
+def update_tray_icon_menu(icon):
+    icon.menu = pystray.Menu(
+        item('Show App', show_main_window),
+        item(f'Notifications {"Off" if notifications_muted else "On"}', toggle_notifications),
+        item('Exit App', quit_application)
+    )
+
+# Function to toggle notifications and update the menu
+def toggle_notifications(icon, item):
+    global notifications_muted
+    notifications_muted = not notifications_muted
+    update_tray_icon_menu(icon)
+
+# Function to create a system tray icon for the prayer app
+def create_system_tray_icon():
+    # Create an image for the icon
+    image = Image.new('RGB', (64, 64), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((16, 16, 48, 48), outline=(0, 0, 0), fill=(255, 255, 255))
+
+    # Create the icon with a menu
+    icon = pystray.Icon("prayer_app", image, "Prayer App", menu=None)
+    update_tray_icon_menu(icon)
+
+    # Run the icon
+    icon.run()
+
+def hide_main_window():
+    root.withdraw()
+    global settings_window
+    global change_location_window
+    global about_window
+    if settings_window:
+        settings_window.destroy()
+    if change_location_window:
+        change_location_window.destroy()
+    if about_window:
+        about_window.destroy()
+    create_system_tray_icon()
+
+def exit_application():
+    root.quit()
+
+def open_about_window():
+    global about_window
+    
+    if about_window is None or not about_window.winfo_exists():  # Check if settings window is not already open or has been closed
+        about_window = tk.Toplevel(root)
+        about_window.title("About")
+        about_window.resizable(0, 0) # Disable resizing
+        about_window.attributes("-topmost", True)  # Ensure stays on top
+        about_window.attributes('-toolwindow', 1)  # Windows-specific attribute to remove minimize and maximize buttons
+
+        # Create labels
+        tk.Label(about_window, text="Maso Maye", font=("Helvetica", 14)).pack(padx=10, pady=10)
+        tk.Label(about_window, text="Prayer Times Notifications", font=("Helvetica", 10)).pack(padx=10, pady=10)
+        tk.Label(about_window, text="Version 1.0", font=("Helvetica", 10)).pack(padx=10, pady=5)
+        tk.Label(about_window, text="Created by nikajiji", font=("Helvetica", 10)).pack(padx=10, pady=5)
+
+        # Create a close button
+        close_button = tk.Button(about_window, text="Close", command=about_window.destroy)
+        close_button.pack(pady=10)
+        
+    else:
+        about_window.lift()  
+
+def load_saved_zone():
+    if os.path.exists('prayer_times.json'):
+        with open('prayer_times.json', 'r') as f:
+            data = json.load(f)
+            return data.get('zone', 'KTN01') # Why does it written KTN01
+    return 'KTN01'
+
+# Initialize Tkinter
 root = tk.Tk()
 root.title("Prayer Times")
 
-current_time = tk.StringVar()
-next_prayer = tk.StringVar()
+# Variable to store the selected zone
+selected_zone = StringVar(root)
+selected_zone.set(load_saved_zone()) 
 
-data_label = ttk.Label(root, text=f"Location Zone: {data['zone']}")
-data_label.pack()
+# Variables to store current time and next prayer time
+current_time = StringVar()
+next_prayer = StringVar()
 
+# Labels to display current time and next prayer time
 time_label = ttk.Label(root, textvariable=current_time)
 time_label.pack()
 
 next_prayer_label = ttk.Label(root, textvariable=next_prayer)
 next_prayer_label.pack()
 
+# Frame to display prayer times
 prayer_times_frame = ttk.Frame(root)
 prayer_times_frame.pack()
 
+# Load data and update UI
+data = load_data(selected_zone.get())
+current_day_prayers = get_current_day_prayers(data['prayers'], datetime.now().day)
 update_prayer_times()
 update_ui()
 
+menu = tk.Menu(root)
+root.config(menu=menu)
+
+settings_menu = tk.Menu(menu, tearoff=False)
+menu.add_cascade(label="Menu", menu=settings_menu)
+settings_menu.add_command(label="Open Settings", command=open_settings_window)
+settings_menu.add_command(label="Close to Tray", command=hide_main_window)
+settings_menu.add_command(label="Exit", command=exit_application)
+
+help_menu = tk.Menu(menu, tearoff=False)
+menu.add_cascade(label="Help", menu=help_menu)
+help_menu.add_command(label="Report Issue", command=open_about_window, state="disabled")
+help_menu.add_command(label="Check for updates", command=open_about_window, state="disabled")
+help_menu.add_command(label="About", command=open_about_window)
+
+root.protocol("WM_DELETE_WINDOW", hide_main_window)
+
+# Start Tkinter main loop
 root.mainloop()
