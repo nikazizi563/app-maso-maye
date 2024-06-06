@@ -14,13 +14,27 @@ from PIL import Image, ImageDraw
 from plyer import notification
 from pystray import MenuItem as item
 
+# Define function to fetch data from API to get the zones
+def fetch_and_save_locations():
+    url = "https://api.waktusolat.app/zones"
+    response = requests.get(url)
+    data = response.json()
+    with open('locations.json', 'w') as f:
+        json.dump(data, f)
+    return data
+
 # Locations data
-def load_locations(filename):
-    with open(filename, 'r') as f:
-        return json.load(f)
+def load_locations():
+    if not os.path.exists('locations.json'):
+        return fetch_and_save_locations()
+
+    with open('locations.json', 'r') as f:
+        data = json.load(f)
+
+    return data
 
 # Load locations from the JSON file
-locations = load_locations('locations.json')
+locations = load_locations()
 
 # Define function to fetch data from API with the given zone
 def fetch_and_save_data(zone):
