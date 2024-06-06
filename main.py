@@ -52,14 +52,11 @@ def load_data(zone):
     with open('prayer_times.json', 'r') as f:
         data = json.load(f)
 
-    if 'last_updated' not in data or 'prayers' not in data:
+    if 'month' not in data or 'prayers' not in data:
         return fetch_and_save_data(zone)
 
-    last_updated = datetime.strptime(data['last_updated'], '%Y-%m-%dT%H:%M:%S.%fZ')
-    current_date = datetime.now()
-
-    # Check if a month has passed since the last update
-    if current_date.month != last_updated.month or current_date.year != last_updated.year:
+    current_month = datetime.now().strftime('%b').upper()
+    if data['month'] != current_month:
         data = fetch_and_save_data(zone)
     
     return data
