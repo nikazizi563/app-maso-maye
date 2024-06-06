@@ -80,13 +80,40 @@ def get_next_prayer_time(prayers):
     return None, None
 
 def update_ui():
-    current_time.set(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    current_time.set(f"{datetime.now().strftime('%I:%M %p')}")
 
     prayer_name, next_prayer_time = get_next_prayer_time(current_day_prayers)
     if next_prayer_time:
         countdown = next_prayer_time - datetime.now()
         countdown_str = str(countdown).split('.')[0]  # Remove microseconds
         next_prayer.set(f"{prayer_name} in {countdown_str}")
+
+        # Check if countdown is exactly 10 minutes
+        if round(countdown.total_seconds()) == 600:
+            if not notifications_muted:
+                winsound.Beep(700, 100)
+                winsound.Beep(400, 100)
+                winsound.Beep(700, 100)
+                winsound.Beep(400, 100)
+                winsound.Beep(700, 100)
+            notification.notify(
+                title="Prayer Time Notification",
+                message="Alert, Prayer Time is in 10 minutes!",
+                timeout=20  # Timeout for the notification display (in seconds)
+            )
+        # Check if countdown is exactly 30 minutes
+        if round(countdown.total_seconds()) == 1800:
+            if not notifications_muted:
+                winsound.Beep(700, 100)
+                winsound.Beep(400, 100)
+                winsound.Beep(700, 100)
+                winsound.Beep(400, 100)
+                winsound.Beep(700, 100)
+            notification.notify(
+                title="Prayer Time Notification",
+                message="Alert, Prayer Time is in 30 minutes!",
+                timeout=20  # Timeout for the notification display (in seconds)
+            )
     else:
         next_prayer.set("No more prayers for today")
         check_for_next_day_update()
@@ -114,10 +141,10 @@ def update_prayer_times():
                 widget.destroy()
 
             day_label = ttk.Label(prayer_times_frame, text=f"Prayer Times for Tomorrow:")
-            day_label.pack()
+            day_label.pack(ipady=5)
 
             for name in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']:
-                time_str = datetime.fromtimestamp(current_day_prayers[name]).strftime('%H:%M:%S')
+                time_str = datetime.fromtimestamp(current_day_prayers[name]).strftime('%H:%M')
                 prayer_time_label = ttk.Label(prayer_times_frame, text=f"{name.capitalize()}: {time_str}")
                 prayer_time_label.pack()
 
@@ -132,13 +159,14 @@ def update_prayer_times():
     else:
         for widget in prayer_times_frame.winfo_children():
             widget.destroy()
-
-        day_label = ttk.Label(prayer_times_frame, text=f"Prayer Times for Today:")
-        day_label.pack()
+        
+        todaydate = datetime.now().strftime('%d-%m-%Y')
+        day_label = ttk.Label(prayer_times_frame, text=f"Prayer Times for Today: {todaydate}", font=("Arial Bold", 12))
+        day_label.pack(ipady=5)
 
         for name in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']:
-            time_str = datetime.fromtimestamp(current_day_prayers[name]).strftime('%H:%M:%S')
-            prayer_time_label = ttk.Label(prayer_times_frame, text=f"{name.capitalize()}: {time_str}")
+            time_str = datetime.fromtimestamp(current_day_prayers[name]).strftime('%H:%M')
+            prayer_time_label = ttk.Label(prayer_times_frame, text=f"{name.capitalize()}: {time_str}", font=("Arial", 11))
             prayer_time_label.pack()
 
 def check_for_next_day_update():
@@ -347,6 +375,7 @@ def load_saved_zone():
 # Initialize Tkinter
 root = tk.Tk()
 root.title("Prayer Times")
+root.resizable(0, 0) # Disable resizing
 
 # Variable to store the selected zone
 selected_zone = StringVar(root)
@@ -357,15 +386,17 @@ current_time = StringVar()
 next_prayer = StringVar()
 
 # Labels to display current time and next prayer time
-time_label = ttk.Label(root, textvariable=current_time)
-time_label.pack()
+time_frame = tk.Frame(root)
+time_frame.pack(padx=50, pady=10, anchor="center")
+time_label = ttk.Label(time_frame, textvariable=current_time, font=("Helvetica", 32), anchor="center")
+time_label.grid(row=0, column=0, padx=5, pady=5, sticky="wens")
 
-next_prayer_label = ttk.Label(root, textvariable=next_prayer)
-next_prayer_label.pack()
+next_prayer_label = ttk.Label(time_frame, textvariable=next_prayer, font=("Helvetica", 16), anchor="center")
+next_prayer_label.grid(row=1, column=0, padx=5, pady=5, sticky="wens")
 
 # Frame to display prayer times
 prayer_times_frame = ttk.Frame(root)
-prayer_times_frame.pack()
+prayer_times_frame.pack(padx=30, ipady=10)
 
 # Load data and update UI
 data = load_data(selected_zone.get())
@@ -388,7 +419,7 @@ help_menu.add_command(label="Report Issue", command=open_about_window, state="di
 help_menu.add_command(label="Check for updates", command=open_about_window, state="disabled")
 help_menu.add_command(label="About", command=open_about_window)
 
-root.protocol("WM_DELETE_WINDOW", hide_main_window)
+# root.protocol("WM_DELETE_WINDOW", hide_main_window)
 
 # Start Tkinter main loop
 root.mainloop()
