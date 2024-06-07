@@ -3,8 +3,9 @@ import requests
 import json
 import os
 import logging
-import pickle
 import threading
+import time
+import pickle
 import random
 import pystray
 import winsound
@@ -13,6 +14,10 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw
 from plyer import notification
 from pystray import MenuItem as item
+
+# Configure logging
+logging.basicConfig(filename='prayer_times.log', level=logging.INFO, 
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 # Define function to fetch data from API to get the zones
 def fetch_and_save_locations():
@@ -36,30 +41,48 @@ def load_locations():
 # Load locations from the JSON file
 locations = load_locations()
 
-# Define function to fetch data from API with the given zone
+# Function to fetch data from API with the given zone
 def fetch_and_save_data(zone):
     url = f"https://api.waktusolat.app/v2/solat/{zone}"
-    response = requests.get(url)
-    data = response.json()
-    with open('prayer_times.json', 'w') as f:
-        json.dump(data, f)
-    return data
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error for bad status codes
+        data = response.json()
+        with open('prayer_times.json', 'w') as f:
+            json.dump(data, f)
+        logging.info(f"Data fetched and saved for zone {zone}")
+        return data
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to fetch data: {e}")
+        if os.path.exists('prayer_times.json'):
+            with open('prayer_times.json', 'r') as f:
+                data = json.load(f)
+            return data
+        return None
 
+# Load data from file or fetch if necessary
 def load_data(zone):
-    if not os.path.exists('prayer_times.json'):
+    try:
+        if not os.path.exists('prayer_times.json'):
+            return fetch_and_save_data(zone)
+
+        with open('prayer_times.json', 'r') as f:
+            data = json.load(f)
+
+        if 'month' not in data or 'prayers' not in data:
+            return fetch_and_save_data(zone)
+
+        current_month = datetime.now().strftime('%b').upper()
+        if data['month'] != current_month:
+            data = fetch_and_save_data(zone)
+
+        return data
+    except json.JSONDecodeError:
+        logging.error("Failed to decode JSON data.")
         return fetch_and_save_data(zone)
-
-    with open('prayer_times.json', 'r') as f:
-        data = json.load(f)
-
-    if 'month' not in data or 'prayers' not in data:
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
         return fetch_and_save_data(zone)
-
-    current_month = datetime.now().strftime('%b').upper()
-    if data['month'] != current_month:
-        data = fetch_and_save_data(zone)
-    
-    return data
 
 def get_current_day_prayers(prayers, current_day):
     for prayer in prayers:
@@ -77,45 +100,53 @@ def get_next_prayer_time(prayers):
     return None, None
 
 def update_ui():
-    current_time.set(f"{datetime.now().strftime('%I:%M %p')}")
+    try:
+        current_time.set(datetime.now().strftime('%I:%M %p'))
 
-    prayer_name, next_prayer_time = get_next_prayer_time(current_day_prayers)
-    if next_prayer_time:
-        countdown = next_prayer_time - datetime.now()
-        countdown_str = str(countdown).split('.')[0]  # Remove microseconds
-        next_prayer.set(f"{prayer_name} in {countdown_str}")
+        if current_day_prayers:
+            prayer_name, next_prayer_time = get_next_prayer_time(current_day_prayers)
+            if next_prayer_time:
+                countdown = next_prayer_time - datetime.now()
+                countdown_str = str(countdown).split('.')[0]  # Remove microseconds
+                next_prayer.set(f"{prayer_name} in {countdown_str}")
 
-        # Check if countdown is exactly 10 minutes
-        if round(countdown.total_seconds()) == 600:
-            if not notifications_muted:
-                winsound.Beep(700, 100)
-                winsound.Beep(400, 100)
-                winsound.Beep(700, 100)
-                winsound.Beep(400, 100)
-                winsound.Beep(700, 100)
-            notification.notify(
-                title="Prayer Time Notification",
-                message="Alert, Prayer Time is in 10 minutes!",
-                timeout=20  # Timeout for the notification display (in seconds)
-            )
-        # Check if countdown is exactly 30 minutes
-        if round(countdown.total_seconds()) == 1800:
-            if not notifications_muted:
-                winsound.Beep(700, 100)
-                winsound.Beep(400, 100)
-                winsound.Beep(700, 100)
-                winsound.Beep(400, 100)
-                winsound.Beep(700, 100)
-            notification.notify(
-                title="Prayer Time Notification",
-                message="Alert, Prayer Time is in 30 minutes!",
-                timeout=20  # Timeout for the notification display (in seconds)
-            )
-    else:
-        next_prayer.set("No more prayers for today")
-        check_for_next_day_update()
+                # Check if countdown is exactly 10 minutes
+                if round(countdown.total_seconds()) == 600:
+                    if not notifications_muted:
+                        winsound.Beep(700, 100)
+                        winsound.Beep(400, 100)
+                        winsound.Beep(700, 100)
+                        winsound.Beep(400, 100)
+                        winsound.Beep(700, 100)
+                    notification.notify(
+                        title="Prayer Time Notification",
+                        message="Alert, Prayer Time is in 10 minutes!",
+                        timeout=20  # Timeout for the notification display (in seconds)
+                    )
+                # Check if countdown is exactly 30 minutes
+                if round(countdown.total_seconds()) == 1800:
+                    if not notifications_muted:
+                        winsound.Beep(700, 100)
+                        winsound.Beep(400, 100)
+                        winsound.Beep(700, 100)
+                        winsound.Beep(400, 100)
+                        winsound.Beep(700, 100)
+                    notification.notify(
+                        title="Prayer Time Notification",
+                        message="Alert, Prayer Time is in 30 minutes!",
+                        timeout=20  # Timeout for the notification display (in seconds)
+                    )
+            else:
+                    next_prayer.set("No more prayers for today")
+                    check_for_next_day_update()
+        else:
+            next_prayer.set("Prayer times not available")
 
-    root.after(1000, update_ui)
+        root.after(1000, update_ui)
+    except Exception as e:
+        logging.error(f"Error updating UI: {e}")
+        next_prayer.set("Error updating UI")
+        root.after(1000, update_ui)  # Ensure the UI keeps updating
 
 def update_prayer_times():
     global current_day_prayers
@@ -137,7 +168,9 @@ def update_prayer_times():
             for widget in prayer_times_frame.winfo_children():
                 widget.destroy()
 
-            day_label = ttk.Label(prayer_times_frame, text=f"Prayer Times for Tomorrow:")
+            tomorrow_date = datetime.now() + timedelta(days=1)
+            tomorrowdate_str = tomorrow_date.strftime('%d-%m-%Y')
+            day_label = ttk.Label(prayer_times_frame, text=f"Prayer Times for Tomorrow: {tomorrowdate_str}")
             day_label.pack(ipady=5)
 
             for name in ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha']:
@@ -364,10 +397,13 @@ def open_about_window():
 
 def load_saved_zone():
     if os.path.exists('prayer_times.json'):
-        with open('prayer_times.json', 'r') as f:
-            data = json.load(f)
-            return data.get('zone', 'KTN01') # Why does it written KTN01
-    return 'KTN01'
+        try:
+            with open('prayer_times.json', 'r') as f:
+                data = json.load(f)
+                return data.get('zone', 'KTN01')
+        except json.JSONDecodeError:
+            logging.error("Failed to decode JSON data.")
+    return 'KTN01'  # Default zone if no saved zone is found
 
 # Initialize Tkinter
 root = tk.Tk()
@@ -397,8 +433,12 @@ prayer_times_frame.pack(padx=30, ipady=10)
 
 # Load data and update UI
 data = load_data(selected_zone.get())
-current_day_prayers = get_current_day_prayers(data['prayers'], datetime.now().day)
-update_prayer_times()
+if data:
+    current_day_prayers = get_current_day_prayers(data['prayers'], datetime.now().day)
+    update_prayer_times()
+else:
+    messagebox.showerror("Error", "Failed to load initial data.")
+
 update_ui()
 
 menu = tk.Menu(root)
